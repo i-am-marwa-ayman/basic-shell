@@ -26,11 +26,6 @@ void emptyPath(){
     PathCount = 0;
 }
 void addPath(char *newPath){
-    PATH = (char **)malloc(PathCapacity * sizeof(char *));
-    if (PATH == NULL){
-        error();
-        return;
-    }
     if(access(newPath, F_OK) == 0){
         if (PathCount >= PathCapacity){
             PathCapacity *= 2;
@@ -51,6 +46,14 @@ void addPath(char *newPath){
         error();
     }
     return;
+}
+void initPath(){
+    PATH = (char **)malloc(PathCapacity * sizeof(char *));
+    if (PATH == NULL){
+        error();
+        return;
+    }
+    addPath("/bin");
 }
 void freePath(){
     emptyPath();
@@ -155,7 +158,7 @@ int redircting(char **args){
 }
 int executCommand(char **args){
     if (args[0] == NULL){
-         error();
+        return 1;
     } else if (strcmp(args[0], "exit") == 0){
         if(args[1] != NULL){
             error();
@@ -252,7 +255,7 @@ int handleInput(char *input){
     return 0;
 }
 int main(int argc, char *argv[]){
-    addPath("/bin");
+    initPath();
     if(argc == 1){
         while (1){
             printf("wish> ");
@@ -263,13 +266,13 @@ int main(int argc, char *argv[]){
             if (input == NULL){
                 error();
                 freePath();
-                exit(1);
+                continue;
             }
             characters = getline(&input, &inpsize, stdin);
             if (characters == -1){
                 error();
                 free(input);
-                break;
+                return 0;
             }
             int ex = handleInput(input);
             free(input);
@@ -280,6 +283,7 @@ int main(int argc, char *argv[]){
     } else if(argc == 2){
         FILE* readFrom = fopen(argv[1], "r");
         if(readFrom == NULL){
+            error();
             freePath();
             exit(1);
         }
@@ -302,6 +306,7 @@ int main(int argc, char *argv[]){
         free(input);
         fclose(readFrom);
     } else {
+        error();
         freePath();
         exit(1);
     }
