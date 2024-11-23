@@ -16,16 +16,21 @@ void error(){
     char error_message[30] = "An error has occurred\n";
     write(STDERR_FILENO, error_message, strlen(error_message)); 
 }
-void initPath(){
-    PATH = (char**)malloc(PathCapacity * sizeof(char*));
-    if(PATH == NULL){
-        error();
+void emptyPath(){
+    for(int i = 0;i < PathCount;i++){
+        if(PATH[i] != NULL){
+            free(PATH[i]);
+        }
     }
-    PATH[PathCount] = (char *)malloc((10) * sizeof(char));
-    strcpy(PATH[PathCount],"/bin");
-    PathCount++;
+    PathCapacity = 20;
+    PathCount = 0;
 }
 void addPath(char *newPath){
+    PATH = (char **)malloc(PathCapacity * sizeof(char *));
+    if (PATH == NULL){
+        error();
+        return;
+    }
     if(access(newPath, F_OK) == 0){
         if (PathCount >= PathCapacity){
             PathCapacity *= 2;
@@ -45,13 +50,10 @@ void addPath(char *newPath){
     } else {
         error();
     }
+    return;
 }
 void freePath(){
-    for(int i = 0;i < PathCount;i++){
-        if(PATH[i] != NULL){
-            free(PATH[i]);
-        }
-    }
+    emptyPath();
     free(PATH);
 }
 int validPath(char* path){
@@ -141,8 +143,10 @@ int redircting(char **args){
     int argsCount = 0;
     while(args[argsCount] != NULL){
         if(strcmp(args[argsCount], ">") == 0){
-            if(args[argsCount + 1] != NULL){
+            if(args[argsCount + 1] != NULL && args[argsCount + 2] == NULL){
                 return argsCount + 1;
+            } else {
+                return -2;
             }
         }
         argsCount++;
@@ -164,6 +168,7 @@ int executCommand(char **args){
             error();
         }
     } else if (strcmp(args[0], "path") == 0) {
+        emptyPath();
         int argCount = 1;
         while(args[argCount] != NULL){
             addPath(args[argCount]);
@@ -173,13 +178,15 @@ int executCommand(char **args){
         char path[100];
         findPath(args[0], path);
         if (path[0] == '\0'){
-            printf("%s\n", path);
             error();
             return 1;
         }
         int fileIndex = redircting(args);
         char *writeTo = NULL;
-        if (fileIndex != -1){
+        if (fileIndex == -2){
+            error();
+            return 1;
+        } else if (fileIndex != -1){
             writeTo = malloc(strlen(args[fileIndex]) + 1 * sizeof(char));
             if (writeTo != NULL){
                 strcpy(writeTo, args[fileIndex]);
@@ -245,7 +252,7 @@ int handleInput(char *input){
     return 0;
 }
 int main(int argc, char *argv[]){
-    initPath();
+    addPath("/bin");
     if(argc == 1){
         while (1){
             printf("wish> ");
