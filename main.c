@@ -5,25 +5,12 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
-//add the path file 
-//rewite the batch mode 
-//work > 
-
 char **PATH = NULL;
 int PathCapacity = 20;
 int PathCount = 0;
 void error(){
     char error_message[30] = "An error has occurred\n";
     write(STDERR_FILENO, error_message, strlen(error_message)); 
-}
-void emptyPath(){
-    for(int i = 0;i < PathCount;i++){
-        if(PATH[i] != NULL){
-            free(PATH[i]);
-        }
-    }
-    PathCapacity = 20;
-    PathCount = 0;
 }
 void addPath(char *newPath){
     if(access(newPath, F_OK) == 0){
@@ -45,19 +32,15 @@ void addPath(char *newPath){
     } else {
         error();
     }
-    return;
 }
 void initPath(){
+    PathCapacity = 20;
+    PathCount = 0;
     PATH = (char **)malloc(PathCapacity * sizeof(char *));
     if (PATH == NULL){
         error();
         return;
     }
-    addPath("/bin");
-}
-void freePath(){
-    emptyPath();
-    free(PATH);
 }
 int validPath(char* path){
     if(access(path, F_OK) == 0){
@@ -80,6 +63,35 @@ void findPath(char *command, char *path){
         }
     }
     path[0] = '\0';
+}
+void freePath(){
+    for(int i = 0;i < PathCount;i++){
+        if(PATH[i] != NULL){
+            free(PATH[i]);
+            PATH[i] = NULL;
+        }
+    }
+    if(PATH != NULL){
+        free(PATH);
+        PATH = NULL;
+    }
+}
+void freeCommand(char ****commands){
+    int commandCount = 0;
+    while((*commands)[commandCount] != NULL){
+        int argCount = 0;
+        while((*commands)[commandCount][argCount] != NULL){
+            free((*commands)[commandCount][argCount]);
+            argCount++;
+        }
+        if((*commands)[commandCount] != NULL){
+            free((*commands)[commandCount]);
+        }
+        commandCount++;
+    }
+    if((*commands) != NULL){
+        free((*commands));
+    }
 }
 int parseInput(char*input, char ****commands){
     int commandCapacity = 20;
@@ -171,7 +183,8 @@ int executCommand(char **args){
             error();
         }
     } else if (strcmp(args[0], "path") == 0) {
-        emptyPath();
+        freePath();
+        initPath();
         int argCount = 1;
         while(args[argCount] != NULL){
             addPath(args[argCount]);
@@ -200,9 +213,10 @@ int executCommand(char **args){
         int rc = fork();
         if (rc < 0) {
             error();
-        } else if (rc == 0){ //child proccess
+        } else if (rc == 0){
             if(writeTo != NULL){
                 fd = open(writeTo, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                free(writeTo);
                 if(fd != -1){
                     dup2(fd, 1);
                     dup2(fd, 2);
@@ -217,23 +231,6 @@ int executCommand(char **args){
         }
     }
     return 1;
-}
-void freeCommand(char ****commands){
-    int commandCount = 0;
-    while((*commands)[commandCount] != NULL){
-        int argCount = 0;
-        while((*commands)[commandCount][argCount] != NULL){
-            free((*commands)[commandCount][argCount]);
-            argCount++;
-        }
-        if((*commands)[commandCount] != NULL){
-            free((*commands)[commandCount]);
-        }
-        commandCount++;
-    }
-    if((*commands) != NULL){
-        free((*commands));
-    }
 }
 int handleInput(char *input){
     char ***commands = NULL;
@@ -256,6 +253,7 @@ int handleInput(char *input){
 }
 int main(int argc, char *argv[]){
     initPath();
+    addPath("/bin");
     if(argc == 1){
         while (1){
             printf("wish> ");
@@ -265,19 +263,20 @@ int main(int argc, char *argv[]){
             input = (char *)malloc(inpsize * sizeof(char));
             if (input == NULL){
                 error();
-                freePath();
                 continue;
             }
             characters = getline(&input, &inpsize, stdin);
             if (characters == -1){
                 error();
                 free(input);
-                return 0;
+                freePath();
+                return 1;
             }
             int ex = handleInput(input);
             free(input);
             if (ex == 1){
-                exit(0);
+                freePath();
+                return 0;
             }
         }
     } else if(argc == 2){
@@ -285,31 +284,30 @@ int main(int argc, char *argv[]){
         if(readFrom == NULL){
             error();
             freePath();
-            exit(1);
+            return 1;
         }
         char *input;
-        size_t inpsize = 64;
+        size_t inpsize = 1024;
         input = (char *)malloc(inpsize * sizeof(char));
         if (input == NULL){
             error();
             freePath();
             fclose(readFrom);
-            exit(1);
+            return 1;
         }
         while(getline(&input, &inpsize, readFrom) != -1) {
             int ex = handleInput(input);
             if (ex == 1){
+                free(input);
+                fclose(readFrom);
                 freePath();
-                exit(0);
+                return 0;
             }
         }
-        free(input);
-        fclose(readFrom);
     } else {
         error();
         freePath();
-        exit(1);
+        return 1;
     }
-    freePath();
     return 0;
 }
