@@ -7,7 +7,7 @@
 
 const int PathCapacity = 50;
 int PathCount = 0;
-char *PATH[50];
+char PATH[50][100];
 void error(){
     char error_message[30] = "An error has occurred\n";
     write(STDERR_FILENO, error_message, strlen(error_message)); 
@@ -15,20 +15,9 @@ void error(){
 void addPath(char *newPath){
     if(access(newPath, F_OK) == 0){
         if (PathCount < PathCapacity){
-            PATH[PathCount] = malloc((strlen(newPath) + 1) * sizeof(char));
-            if(PATH[PathCount] != NULL){
-                strcpy(PATH[PathCount++], newPath);
-            }
+            strcpy(PATH[PathCount++], newPath);
         }
     }
-}
-void freePath(){
-    for(int i = 0;i < PathCount;i++){
-        if(PATH[PathCount] != NULL){
-            free(PATH[PathCount]);
-        }
-    }
-    PathCount = 0;
 }
 int validPath(char* path){
     if(access(path, F_OK) == 0){
@@ -40,7 +29,7 @@ int validPath(char* path){
 }
 void findPath(char *command, char *path){
     for(int i = 0;i < PathCount;i++){
-        char line[50];
+        char line[100];
         strcpy(line,PATH[i]);
         strcat(line, "/");
         strcat(line, command);
@@ -69,20 +58,13 @@ void freeCommand(char ****commands){
         free((*commands));
     }
 }
-int parseInput(char*input, char ****commands){
-    int commandCapacity = 20;
-    int commandCount = 0;
-    *commands = (char***)malloc(commandCapacity * sizeof(char**));
-    if (*commands == NULL) {
-        error();
-        return 0;
-    }
+void parseCommand(char*input, char ***command){
     int argCapacity = 20;
     int argCount = 0;
-    (*commands)[0] = (char**)malloc(argCapacity * sizeof(char*));
-    if ((*commands)[0] == NULL) {
+    *command = (char**)malloc(argCapacity * sizeof(char*));
+    if (*command == NULL) {
         error();
-        return 0;
+        return;
     }
     char *token, *string, *toFree;
     toFree = string = strdup(input);
@@ -90,47 +72,56 @@ int parseInput(char*input, char ****commands){
         if (token[0] == '\0') {
             continue;
         }
-        if (strcmp(token, "&") == 0){
-            (*commands)[commandCount][argCount] = NULL;
-            commandCount++;
-            if(commandCount >= commandCapacity){
-                commandCapacity *= 2;
-                *commands = (char***)realloc(*commands,commandCapacity * sizeof(char**));
-                if (*commands == NULL) {
-                    error();
-                    return 0;
-                }
-            }
-            (*commands)[commandCount] = (char**)malloc(argCapacity * sizeof(char*));
-            if ((*commands)[commandCount] == NULL){
-                error();
-                return 0;
-            }
-            argCount = 0;
-            continue;
-        }
         if(argCount >= argCapacity){
             argCapacity *= 2;
-            (*commands)[commandCount] = (char**)realloc((*commands)[commandCount],argCapacity * sizeof(char*));
-            if ((*commands)[commandCount] == NULL){
+            *command = (char**)realloc(*command,argCapacity * sizeof(char*));
+            if (*command == NULL){
+                error();
+                return;
+            }
+        }
+        (*command)[argCount] = (char *)malloc((strlen(token) + 1) * sizeof(char));
+        if ((*command)[argCount] == NULL){
+            error();
+            return;
+        }
+        strcpy((*command)[argCount], token);
+        argCount++;
+    }
+    free(toFree);
+    (*command)[argCount++] = NULL;
+    return;
+}
+int parseLine(char*input, char ****commands){
+    int commandCapacity = 20;
+    int commandCount = 0;
+    *commands = (char***)malloc(commandCapacity * sizeof(char**));
+    if (*commands == NULL) {
+        error();
+        return 0;
+    }
+    char *token, *string, *toFree;
+    toFree = string = strdup(input);
+    while ((token = strsep(&string,  "&")) != NULL){
+        if (token[0] == '\0') {
+            continue;
+        }
+        if (commandCount >= commandCapacity){
+            commandCapacity *= 2;
+            *commands = (char ***)realloc(*commands, commandCapacity * sizeof(char **));
+            if (*commands == NULL){
                 error();
                 return 0;
             }
         }
-        (*commands)[commandCount][argCount] = (char *)malloc((strlen(token) + 1) * sizeof(char));
-        if ((*commands)[commandCount][argCount] == NULL){
-            error();
-            return 0;
-        }
-        strcpy((*commands)[commandCount][argCount], token);
-        argCount++;
+        parseCommand(token, &(*commands)[commandCount]);
+        commandCount++;
     }
-    (*commands)[commandCount][argCount] = NULL;
-    (*commands)[commandCount + 1] = NULL;
     free(toFree);
-    return commandCount + 1;
+    (*commands)[commandCount] = NULL;
+    return commandCount;
 }
-int redircting(char **args){
+int needRedircting(char **args){
     int argsCount = 0;
     while(args[argsCount] != NULL){
         if(strcmp(args[argsCount], ">") == 0){
@@ -159,7 +150,7 @@ int executCommand(char **args){
             error();
         }
     } else if (strcmp(args[0], "path") == 0) {
-        freePath();
+        PathCount = 0;
         int argCount = 1;
         while(args[argCount] != NULL){
             addPath(args[argCount]);
@@ -172,7 +163,7 @@ int executCommand(char **args){
             error();
             return 1;
         }
-        int fileIndex = redircting(args);
+        int fileIndex = needRedircting(args);
         char *writeTo = NULL;
         if (fileIndex == -2){
             error();
@@ -208,8 +199,11 @@ int executCommand(char **args){
     return 1;
 }
 int handleInput(char *input){
+    if (input == NULL || input[0] == '\0') {
+        return 0;  // Handle empty input
+    }
     char ***commands = NULL;
-    int commandCount = parseInput(input, &commands);
+    int commandCount = parseLine(input, &commands);
     for (int i = 0; i < commandCount; i++){
         int exit = executCommand(commands[i]);
         if (exit == 0){
@@ -243,13 +237,11 @@ int main(int argc, char *argv[]){
             if (characters == -1){
                 error();
                 free(input);
-                freePath();
                 return 1;
             }
             int ex = handleInput(input);
             free(input);
             if (ex == 1){
-                freePath();
                 return 0;
             }
         }
@@ -257,7 +249,6 @@ int main(int argc, char *argv[]){
         FILE* readFrom = fopen(argv[1], "r");
         if(readFrom == NULL){
             error();
-            freePath();
             return 1;
         }
         char *input;
@@ -265,7 +256,6 @@ int main(int argc, char *argv[]){
         input = (char *)malloc(inpsize * sizeof(char));
         if (input == NULL){
             error();
-            freePath();
             fclose(readFrom);
             return 1;
         }
@@ -274,13 +264,11 @@ int main(int argc, char *argv[]){
             if (ex == 1){
                 free(input);
                 fclose(readFrom);
-                freePath();
                 return 0;
             }
         }
     } else {
         error();
-        freePath();
         return 1;
     }
     return 0;
