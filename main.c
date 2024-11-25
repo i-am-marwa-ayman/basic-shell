@@ -5,42 +5,30 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
-char **PATH = NULL;
-int PathCapacity = 20;
+const int PathCapacity = 50;
 int PathCount = 0;
+char *PATH[50];
 void error(){
     char error_message[30] = "An error has occurred\n";
     write(STDERR_FILENO, error_message, strlen(error_message)); 
 }
 void addPath(char *newPath){
     if(access(newPath, F_OK) == 0){
-        if (PathCount >= PathCapacity){
-            PathCapacity *= 2;
-            PATH = (char **)realloc(PATH, PathCapacity * sizeof(char *));
-            if (PATH == NULL){
-                error();
-                return;
+        if (PathCount < PathCapacity){
+            PATH[PathCount] = malloc((strlen(newPath) + 1) * sizeof(char));
+            if(PATH[PathCount] != NULL){
+                strcpy(PATH[PathCount++], newPath);
             }
         }
-        PATH[PathCount] = (char *)malloc((strlen(newPath) + 1) * sizeof(char));
-        if (PATH[PathCount] == NULL){
-            error();
-            return;
-        }
-        strcpy(PATH[PathCount], newPath);
-        PathCount++;
-    } else {
-        error();
     }
 }
-void initPath(){
-    PathCapacity = 20;
-    PathCount = 0;
-    PATH = (char **)malloc(PathCapacity * sizeof(char *));
-    if (PATH == NULL){
-        error();
-        return;
+void freePath(){
+    for(int i = 0;i < PathCount;i++){
+        if(PATH[PathCount] != NULL){
+            free(PATH[PathCount]);
+        }
     }
+    PathCount = 0;
 }
 int validPath(char* path){
     if(access(path, F_OK) == 0){
@@ -63,18 +51,6 @@ void findPath(char *command, char *path){
         }
     }
     path[0] = '\0';
-}
-void freePath(){
-    for(int i = 0;i < PathCount;i++){
-        if(PATH[i] != NULL){
-            free(PATH[i]);
-            PATH[i] = NULL;
-        }
-    }
-    if(PATH != NULL){
-        free(PATH);
-        PATH = NULL;
-    }
 }
 void freeCommand(char ****commands){
     int commandCount = 0;
@@ -184,7 +160,6 @@ int executCommand(char **args){
         }
     } else if (strcmp(args[0], "path") == 0) {
         freePath();
-        initPath();
         int argCount = 1;
         while(args[argCount] != NULL){
             addPath(args[argCount]);
@@ -252,13 +227,12 @@ int handleInput(char *input){
     return 0;
 }
 int main(int argc, char *argv[]){
-    initPath();
     addPath("/bin");
     if(argc == 1){
         while (1){
             printf("wish> ");
             char *input;
-            size_t inpsize = 64;
+            size_t inpsize = 1024;
             int characters;
             input = (char *)malloc(inpsize * sizeof(char));
             if (input == NULL){
