@@ -8,10 +8,12 @@
 const int PathCapacity = 50;
 int PathCount = 0;
 char PATH[50][100];
+
 void error(){
     char error_message[30] = "An error has occurred\n";
     write(STDERR_FILENO, error_message, strlen(error_message)); 
 }
+
 void addPath(char *newPath){
     if(access(newPath, F_OK) == 0){
         if (PathCount < PathCapacity){
@@ -41,6 +43,7 @@ void findPath(char *command, char *path){
     }
     path[0] = '\0';
 }
+
 void freeCommand(char ****commands){
     int commandCount = 0;
     while((*commands)[commandCount] != NULL){
@@ -121,7 +124,11 @@ int parseLine(char*input, char ****commands){
     (*commands)[commandCount] = NULL;
     return commandCount;
 }
-int needRedircting(char **args){
+
+int redirctingMode(char **args){
+    // return -1 if does not have > 
+    // return -2 if there is no file or too many files after >
+    // normaly return the file postion
     int argsCount = 0;
     while(args[argsCount] != NULL){
         if(strcmp(args[argsCount], ">") == 0){
@@ -163,7 +170,7 @@ int executCommand(char **args){
             error();
             return 1;
         }
-        int fileIndex = needRedircting(args);
+        int fileIndex = redirctingMode(args);
         char *writeTo = NULL;
         if (fileIndex == -2){
             error();
@@ -175,43 +182,36 @@ int executCommand(char **args){
             }
             args[fileIndex - 1] = NULL;
         }
-        int fd = -1;
         int rc = fork();
         if (rc < 0) {
             error();
         } else if (rc == 0){
-            if(writeTo != NULL){
-                fd = open(writeTo, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                free(writeTo);
-                if(fd != -1){
+            if (writeTo != NULL){
+                int fd = open(writeTo, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (fd != -1){
                     dup2(fd, 1);
                     dup2(fd, 2);
                 }
+                close(fd);
+                free(writeTo);
             }
             execv(path, args);
             error();
-        } else {
-            if(fd != -1){
-                close(fd);
-            }
         }
     }
     return 1;
 }
 int handleInput(char *input){
-    if (input == NULL || input[0] == '\0') {
-        return 0;  // Handle empty input
-    }
     char ***commands = NULL;
     int commandCount = parseLine(input, &commands);
     for (int i = 0; i < commandCount; i++){
         int exit = executCommand(commands[i]);
-        if (exit == 0){
+        if (exit == 0){ 
             freeCommand(&commands);
             return 1;
         }
     }
-    for (int i = 0; i < commandCount; i++){
+    for (int i = 0; i < commandCount; i++){ // wait for every chile proccess to finish
         pid_t child_pid = wait(NULL);
         if (child_pid == -1){
             break;
@@ -222,7 +222,7 @@ int handleInput(char *input){
 }
 int main(int argc, char *argv[]){
     addPath("/bin");
-    if(argc == 1){
+    if(argc == 1){ // interactive mode
         while (1){
             printf("wish> ");
             char *input;
@@ -245,7 +245,7 @@ int main(int argc, char *argv[]){
                 return 0;
             }
         }
-    } else if(argc == 2){
+    } else if(argc == 2){ // batch mode
         FILE* readFrom = fopen(argv[1], "r");
         if(readFrom == NULL){
             error();
@@ -260,14 +260,14 @@ int main(int argc, char *argv[]){
             return 1;
         }
         while(getline(&input, &inpsize, readFrom) != -1) {
-            int ex = handleInput(input);
+            int ex = handleInput(input); // return 1 if exit
             if (ex == 1){
-                free(input);
-                fclose(readFrom);
-                return 0;
+                break;
             }
         }
-    } else {
+        free(input);
+        fclose(readFrom);
+    } else { // too many args
         error();
         return 1;
     }
