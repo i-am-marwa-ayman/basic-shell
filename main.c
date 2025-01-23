@@ -4,8 +4,9 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <fcntl.h>
+#define PathCapacity 50
 
-const int PathCapacity = 50;
+
 int PathCount = 0;
 char PATH[50][100];
 
@@ -14,12 +15,14 @@ void error(){
     write(STDERR_FILENO, error_message, strlen(error_message)); 
 }
 
-void addPath(char *newPath){
+int addPath(char *newPath){
     if(access(newPath, F_OK) == 0){
         if (PathCount < PathCapacity){
             strcpy(PATH[PathCount++], newPath);
+            return 1;
         }
     }
+    return 0;
 }
 int validPath(char* path){
     if(access(path, F_OK) == 0){
@@ -160,8 +163,10 @@ int executCommand(char **args){
         PathCount = 0;
         int argCount = 1;
         while(args[argCount] != NULL){
-            addPath(args[argCount]);
-            argCount++;
+            int added = addPath(args[argCount]);
+            if(added == 1){
+                argCount++;
+            }
         }
     } else {
         char path[100];
