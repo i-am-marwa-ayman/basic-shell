@@ -98,6 +98,7 @@ void parseCommand(char*input, char ***command){
     (*command)[argCount++] = NULL;
     return;
 }
+
 int parseLine(char*input, char ****commands){
     int commandCapacity = 20;
     int commandCount = 0;
